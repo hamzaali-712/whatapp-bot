@@ -1,128 +1,83 @@
-
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-
 import { env } from './config/env.js';
-
-import healthRoutes from './routes/health.js';
-import whatsappRoutes from './routes/whatsapp.js';
-import webhookRoutes from './routes/webhook.js';
-
+import { logger } from './config/logger.js';
 import { authenticateAPI } from './middleware/auth.js';
-
-import { startWhatsApp } from './whatsapp/client.js';
+import { errorHandler, notFound } from './middleware/errors.js';
+import { requestId } from './middleware/request-id.js';
+import healthRoutes from './routes/health.js';
+import webhookRoutes from './routes/webhook.js';
+import whatsappRoutes from './routes/whatsapp.js';
+import { startWhatsApp, stopWhatsApp } from './whatsapp/client.js';
 
 const app = express();
+let shuttingDown = false;
 
-// Basic security headers
+app.disable('x-powered-by');
+app.use(requestId);
 app.use(helmet());
-
-// CORS
-app.use(
-  cors({
-    origin: env.CORS_ORIGINS.length
-      ? env.CORS_ORIGINS
-      : false,
-    methods: ['GET', 'POST'],
-    allowedHeaders: [
-      'Content-Type',
-      'Authorization',
-      'x-api-key',
-    ],
-  })
-);
-
-// Request parsing
+app.use(cors({
+  origin: env.CORS_ORIGINS.length > 0 ? env.CORS_ORIGINS : false,
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-request-id'],
+}));
 app.use(express.json({ limit: '12mb' }));
 
-// Rate limiting
 const apiLimiter = rateLimit({
-  windowMs: 60 * 1000,
+  windowMs: 60_000,
   limit: 60,
-  standardHeaders: 'draft-7',
+  standardHeaders: 'draft-8',
   legacyHeaders: false,
-  message: {
-    success: false,
-    error: 'Too many requests. Please try again later.',
+  handler: (req, res) => {
+    res.status(429).json({
+      success: false,
+      error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' },
+      requestId: res.locals.requestId,
+    });
   },
 });
 
-// Health check (public)
 app.use('/health', healthRoutes);
-
-// Protected API
 app.use('/api', apiLimiter);
+app.use('/api/whatsapp', authenticateAPI, whatsappRoutes);
+app.use('/api/webhook', authenticateAPI, webhookRoutes);
+app.use(notFound);
+app.use(errorHandler);
 
-app.use(
-  '/api/whatsapp',
-  authenticateAPI,
-  whatsappRoutes
-);
-
-app.use(
-  '/api/webhook',
-  authenticateAPI,
-  webhookRoutes
-);
-
-// 404 handler
-app.use((_req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Endpoint not found.',
-  });
-});
-
-// Central error handler
-app.use(
-  (
-    error: Error,
-    _req: express.Request,
-    res: express.Response,
-    _next: express.NextFunction
-  ) => {
-    console.error('API Error:', error.message);
-
-    if (res.headersSent) return;
-
-    res.status(500).json({
-      success: false,
-      error:
-        env.NODE_ENV === 'production'
-          ? 'Internal server error.'
-          : error.message,
-    });
-  }
-);
-
-// Start server
 const server = app.listen(env.PORT, '0.0.0.0', () => {
-  console.log('----------------------------------');
-  console.log(' WhatsApp API Server Started');
-  console.log('----------------------------------');
-  console.log(`Port: ${env.PORT}`);
-  console.log(`Environment: ${env.NODE_ENV}`);
-  console.log(`Health: http://localhost:${env.PORT}/health`);
-  console.log('----------------------------------');
-
-  // Start WhatsApp in the background.
-  void startWhatsApp().catch((error) => {
-    console.error('WhatsApp startup error:', error);
+  logger.info({ port: env.PORT, environment: env.NODE_ENV }, 'HTTP server started');
+  void startWhatsApp().catch((error: unknown) => {
+    logger.error({ err: error }, 'WhatsApp startup failed');
   });
 });
 
-// Graceful shutdown
-async function shutdown() {
-  console.log('Shutting down server...');
+async function shutdown(signal: string): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  logger.info({ signal }, 'graceful shutdown started');
 
-  server.close(() => {
-    console.log('HTTP server closed.');
-  });
+  const forcedExit = setTimeout(() => {
+    logger.error('graceful shutdown timed out');
+    process.exit(1);
+  }, 25_000);
+  forcedExit.unref();
 
-  process.exit(0);
+  try {
+    await stopWhatsApp();
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => (error ? reject(error) : resolve()));
+    });
+    logger.info('graceful shutdown completed');
+    process.exitCode = 0;
+  } catch (error) {
+    logger.error({ err: error }, 'graceful shutdown failed');
+    process.exitCode = 1;
+  } finally {
+    clearTimeout(forcedExit);
+  }
 }
 
-process.on('SIGTERM', shutdown);
-process.on('SIGINT', shutdown);
+process.once('SIGTERM', () => { void shutdown('SIGTERM'); });
+process.once('SIGINT', () => { void shutdown('SIGINT'); });

@@ -6,12 +6,14 @@ import {
 } from '@whiskeysockets/baileys';
 
 import type { AuthenticationState } from '@whiskeysockets/baileys';
+import type { SignalDataSet, SignalDataTypeMap, SignalKeyStore } from '@whiskeysockets/baileys';
 
 import { createClient } from '@supabase/supabase-js';
 
 import pino from 'pino';
 
 import { env } from '../config/env.js';
+import { decryptAuthValue, encryptAuthValue, encryptionKeyFromHex } from './crypto.js';
 
 const supabase = createClient(
   env.SUPABASE_URL,
@@ -25,6 +27,8 @@ const supabase = createClient(
 );
 
 const sessionId = env.WHATSAPP_SESSION_ID;
+const encryptionKey = encryptionKeyFromHex(env.AUTH_ENCRYPTION_KEY);
+let pendingWrites: Promise<void> = Promise.resolve();
 
 const logger = pino({ level: 'silent' });
 
@@ -50,20 +54,22 @@ async function getStoredValue(key: string): Promise<string | null> {
     throw new Error(`Auth read failed: ${error.message}`);
   }
 
-  return data?.value ?? null;
+  return data?.value ? decryptAuthValue(data.value, encryptionKey) : null;
 }
 
 async function saveStoredValue(
   key: string,
   value: string
 ): Promise<void> {
+  const encryptedValue = encryptAuthValue(value, encryptionKey);
+  const write = async () => {
   const { error } = await supabase
     .from('whatsapp_auth')
     .upsert(
       {
         session_id: sessionId,
         key,
-        value,
+        value: encryptedValue,
         updated_at: new Date().toISOString(),
       },
       {
@@ -74,6 +80,10 @@ async function saveStoredValue(
   if (error) {
     throw new Error(`Auth write failed: ${error.message}`);
   }
+  };
+  const operation = pendingWrites.then(write);
+  pendingWrites = operation.catch(() => undefined);
+  await operation;
 }
 
 // Load credentials or initialize a new WhatsApp session.
@@ -92,8 +102,8 @@ async function loadCredentials() {
 }
 
 // Custom persistent Signal key store.
-const signalKeyStore = {
-  async get(type: string, ids: string[]) {
+const signalKeyStore: SignalKeyStore = {
+  async get<T extends keyof SignalDataTypeMap>(type: T, ids: string[]) {
     if (!ids.length) return {};
 
     const keys = ids.map((id) => `${type}:${id}`);
@@ -108,18 +118,18 @@ const signalKeyStore = {
       throw new Error(`Signal key read failed: ${error.message}`);
     }
 
-    const result: Record<string, unknown> = {};
+    const result: Record<string, SignalDataTypeMap[T]> = {};
 
     for (const row of data || []) {
       const originalId = row.key.slice(type.length + 1);
 
-      result[originalId] = decode(row.value);
+      result[originalId] = decode<SignalDataTypeMap[T]>(decryptAuthValue(row.value, encryptionKey));
     }
 
     return result;
   },
 
-  async set(data: Record<string, Record<string, unknown>>) {
+  async set(data: SignalDataSet) {
     const records: Array<{
       session_id: string;
       key: string;
@@ -129,7 +139,10 @@ const signalKeyStore = {
 
     const deletions: string[] = [];
 
-    for (const [type, entries] of Object.entries(data)) {
+    for (const [type, entries] of Object.entries(data) as Array<[
+      keyof SignalDataTypeMap,
+      Record<string, SignalDataTypeMap[keyof SignalDataTypeMap] | null>,
+    ]>) {
       for (const [id, value] of Object.entries(entries)) {
         const key = `${type}:${id}`;
 
@@ -139,7 +152,7 @@ const signalKeyStore = {
           records.push({
             session_id: sessionId,
             key,
-            value: encode(value),
+            value: encryptAuthValue(encode(value), encryptionKey),
             updated_at: new Date().toISOString(),
           });
         }
@@ -147,6 +160,7 @@ const signalKeyStore = {
     }
 
     if (deletions.length) {
+      const operation = pendingWrites.then(async () => {
       const { error } = await supabase
         .from('whatsapp_auth')
         .delete()
@@ -156,9 +170,13 @@ const signalKeyStore = {
       if (error) {
         throw new Error(`Signal key deletion failed: ${error.message}`);
       }
+      });
+      pendingWrites = operation.catch(() => undefined);
+      await operation;
     }
 
     if (records.length) {
+      const operation = pendingWrites.then(async () => {
       const { error } = await supabase
         .from('whatsapp_auth')
         .upsert(records, {
@@ -168,6 +186,9 @@ const signalKeyStore = {
       if (error) {
         throw new Error(`Signal key write failed: ${error.message}`);
       }
+      });
+      pendingWrites = operation.catch(() => undefined);
+      await operation;
     }
   },
 };
@@ -177,7 +198,7 @@ export async function createAuthState() {
   const creds = await loadCredentials();
 
   const keys = makeCacheableSignalKeyStore(
-    signalKeyStore as any,
+    signalKeyStore,
     logger
   );
 
@@ -198,6 +219,7 @@ export async function createAuthState() {
 
 // Remove the complete session from Supabase.
 export async function clearAuthState() {
+  await pendingWrites;
   const { error } = await supabase
     .from('whatsapp_auth')
     .delete()
@@ -206,4 +228,8 @@ export async function clearAuthState() {
   if (error) {
     throw new Error(`Could not clear session: ${error.message}`);
   }
+}
+
+export async function flushAuthWrites(): Promise<void> {
+  await pendingWrites;
 }

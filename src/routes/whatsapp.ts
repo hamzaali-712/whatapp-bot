@@ -1,149 +1,55 @@
-
 import { Router } from 'express';
-
-import {
-  getQRCode,
-  getWhatsAppStatus,
-  disconnectWhatsApp,
-} from '../whatsapp/client.js';
-
-import {
-  sendTextMessage,
-  sendImageMessage,
-  sendDocumentMessage,
-} from '../services/message.service.js';
+import rateLimit from 'express-rate-limit';
+import { z } from 'zod';
+import { disconnectWhatsApp, getQRCode, getWhatsAppStatus } from '../whatsapp/client.js';
+import { ApiError } from '../middleware/errors.js';
+import { sendDocumentMessage, sendImageMessage, sendTextMessage } from '../services/message.service.js';
 
 const router = Router();
-
-// Connection status
-router.get('/status', (_req, res) => {
-  res.json({
-    success: true,
-    data: getWhatsAppStatus(),
-  });
-});
-
-// QR code
-router.get('/qr', (_req, res) => {
-  const qr = getQRCode();
-
-  if (!qr.qr) {
-    return res.status(404).json({
+function routeLimiter(limit: number) {
+  return rateLimit({
+    windowMs: 60_000,
+    limit,
+    standardHeaders: 'draft-8',
+    legacyHeaders: false,
+    handler: (_req, res) => res.status(429).json({
       success: false,
-      message: 'QR unavailable. Check connection status.',
-    });
-  }
-
-  res.json({
-    success: true,
-    qr: qr.qr,
-    qrImage: qr.qrImage,
+      error: { code: 'RATE_LIMITED', message: 'Too many requests. Please try again later.' },
+      requestId: res.locals.requestId,
+    }),
   });
+}
+const qrLimiter = routeLimiter(10);
+const sendLimiter = routeLimiter(20);
+const logoutLimiter = routeLimiter(5);
+const recipient = z.string().trim().min(8).max(20);
+const textSchema = z.object({ number: recipient, message: z.string().trim().min(1).max(4_000) });
+const imageSchema = z.object({ number: recipient, base64: z.string().min(1), caption: z.string().max(1_024).optional(), mimetype: z.enum(['image/jpeg', 'image/png', 'image/webp']) });
+const documentSchema = z.object({ number: recipient, base64: z.string().min(1), fileName: z.string().min(1).max(150).regex(/^[^\\/]+$/), caption: z.string().max(1_024).optional(), mimetype: z.enum(['application/pdf', 'text/plain', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']) });
+
+function parse<T>(schema: z.ZodType<T>, input: unknown): T {
+  const result = schema.safeParse(input);
+  if (!result.success) throw new ApiError(400, 'INVALID_REQUEST', 'Request body is invalid.');
+  return result.data;
+}
+
+router.get('/status', (_req, res) => res.json({ success: true, data: getWhatsAppStatus() }));
+router.get('/qr', qrLimiter, (_req, res) => {
+  const qrDataUrl = getQRCode();
+  if (!qrDataUrl) throw new ApiError(404, 'QR_UNAVAILABLE', 'QR unavailable. Check connection status.');
+  res.json({ success: true, data: { qrDataUrl } });
 });
-
-// Send text
-router.post('/send', async (req, res, next) => {
-  try {
-    const { number, message } = req.body;
-
-    if (
-      typeof number !== 'string' ||
-      typeof message !== 'string'
-    ) {
-      return res.status(400).json({
-        success: false,
-        error: 'Number and message are required.',
-      });
-    }
-
-    const result = await sendTextMessage(number, message);
-
-    res.json(result);
-
-  } catch (error) {
-    next(error);
-  }
+router.post('/send', sendLimiter, async (req, res, next) => {
+  try { const data = parse(textSchema, req.body); res.status(202).json({ success: true, data: await sendTextMessage(data.number, data.message) }); } catch (error) { next(error); }
 });
-
-// Send image
-router.post('/send-image', async (req, res, next) => {
-  try {
-    const { number, base64, caption, mimetype } = req.body;
-
-    if (
-      typeof number !== 'string' ||
-      typeof base64 !== 'string'
-    ) {
-      return res.status(400).json({
-        success: false,
-        error: 'Number and base64 image are required.',
-      });
-    }
-
-    const result = await sendImageMessage(
-      number,
-      base64,
-      caption,
-      mimetype
-    );
-
-    res.json(result);
-
-  } catch (error) {
-    next(error);
-  }
+router.post('/send-image', sendLimiter, async (req, res, next) => {
+  try { const data = parse(imageSchema, req.body); res.status(202).json({ success: true, data: await sendImageMessage(data.number, data.base64, data.caption, data.mimetype) }); } catch (error) { next(error); }
 });
-
-// Send document
-router.post('/send-document', async (req, res, next) => {
-  try {
-    const {
-      number,
-      base64,
-      fileName,
-      mimetype,
-      caption,
-    } = req.body;
-
-    if (
-      typeof number !== 'string' ||
-      typeof base64 !== 'string' ||
-      typeof fileName !== 'string'
-    ) {
-      return res.status(400).json({
-        success: false,
-        error: 'Number, base64 and fileName are required.',
-      });
-    }
-
-    const result = await sendDocumentMessage(
-      number,
-      base64,
-      fileName,
-      mimetype,
-      caption
-    );
-
-    res.json(result);
-
-  } catch (error) {
-    next(error);
-  }
+router.post('/send-document', sendLimiter, async (req, res, next) => {
+  try { const data = parse(documentSchema, req.body); res.status(202).json({ success: true, data: await sendDocumentMessage(data.number, data.base64, data.fileName, data.caption, data.mimetype) }); } catch (error) { next(error); }
 });
-
-// Disconnect and remove the saved session
-router.post('/disconnect', async (_req, res, next) => {
-  try {
-    await disconnectWhatsApp();
-
-    res.json({
-      success: true,
-      message: 'WhatsApp disconnected and session removed.',
-    });
-
-  } catch (error) {
-    next(error);
-  }
+router.post('/logout', logoutLimiter, async (_req, res, next) => {
+  try { await disconnectWhatsApp(); res.json({ success: true, data: { status: 'logged_out' } }); } catch (error) { next(error); }
 });
 
 export default router;

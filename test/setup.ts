@@ -1,0 +1,10 @@
+process.env.NODE_ENV = 'test';
+process.env.PORT = '5000';
+process.env.API_SECRET = 'a'.repeat(32);
+process.env.SUPABASE_URL = 'https://example.supabase.co';
+process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key';
+process.env.WHATSAPP_SESSION_ID = 'test';
+process.env.AUTH_ENCRYPTION_KEY = 'b'.repeat(64);
+process.env.WEBHOOK_URL = '';
+process.env.WEBHOOK_SECRET = '';
+process.env.CORS_ORIGINS = 'http://localhost:3000';

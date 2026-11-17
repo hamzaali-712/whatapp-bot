@@ -29,7 +29,8 @@ export function authenticateAPI(
   ) {
     return res.status(401).json({
       success: false,
-      error: 'Unauthorized. Invalid API key.',
+      error: { code: 'UNAUTHORIZED', message: 'Unauthorized. Invalid API key.' },
+      requestId: res.locals.requestId,
     });
   }
 
@@ -41,7 +42,8 @@ export function authenticateAPI(
   if (!valid) {
     return res.status(401).json({
       success: false,
-      error: 'Unauthorized. Invalid API key.',
+      error: { code: 'UNAUTHORIZED', message: 'Unauthorized. Invalid API key.' },
+      requestId: res.locals.requestId,
     });
   }
 
