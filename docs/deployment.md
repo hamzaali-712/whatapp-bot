@@ -1,7 +1,8 @@
 # Deployment
 
 Target repository: https://github.com/hamzaali-712/whatapp-bot.
-Deployment remains a separate step after the user's deploy command.
+The user authorized deployment and selected Free compute. The live deployment
+and test results are recorded in [deployment-result.md](deployment-result.md).
 
 `render.yaml` proposes one Node 24.22.0 web service, manual deploys,
 `npm ci --include=dev && npm run build`, `npm start`, and `/health/live`.
@@ -34,7 +35,7 @@ Before deployment:
 
 Terminal commands support `plan`, `workspaces`, `projects`, `services`,
 `create-project WORKSPACE_ID`, `create-service WORKSPACE_ID ENVIRONMENT_ID`,
-`status SERVICE_ID`, and `deploy SERVICE_ID COMMIT_SHA`. The service creation
+`status SERVICE_ID`, `logs WORKSPACE_ID SERVICE_ID`, and `deploy SERVICE_ID COMMIT_SHA`. The service creation
 command reads application secrets locally and uploads only the required backend
 configuration; it does not upload the Render management key. It refuses to run
 while the local API is listening. Creation starts the initial Render deployment.

@@ -4,13 +4,13 @@ The service is an authenticated WhatsApp REST API. A separate bot/AI application
 can call it to send messages, and receive incoming events at its webhook URL.
 The API itself does not implement automatic conversational replies.
 
-Use the service URL returned after successful Render deployment as the base URL.
-Until then, local testing uses `http://127.0.0.1:5000` on this computer.
+The deployed base URL is `https://whatapp-bot-xnb0.onrender.com`.
+The local API is stopped so the cloud service owns the WhatsApp session.
 
 Set these values only in the other project's backend environment:
 
 ```dotenv
-WHATSAPP_API_URL=https://YOUR_SERVICE.onrender.com
+WHATSAPP_API_URL=https://whatapp-bot-xnb0.onrender.com
 WHATSAPP_API_KEY=THE_EXISTING_API_SECRET_FROM_THIS_PROJECT_ENV
 ```
 

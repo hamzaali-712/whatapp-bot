@@ -78,6 +78,10 @@ try {
     if (!id) throw new Error('A service ID is required.');
     print(summary(await api(`/services/${encodeURIComponent(id)}`)));
     print(await api(`/services/${encodeURIComponent(id)}/deploys?limit=5`));
+  } else if (action === 'logs') {
+    if (!id || !argument) throw new Error('Usage: npm run render -- logs WORKSPACE_ID SERVICE_ID');
+    const result = await api(`/logs?ownerId=${encodeURIComponent(id)}&resource=${encodeURIComponent(argument)}&limit=60`);
+    print({ hasMore: result.hasMore, logs: result.logs.map(entry => ({ time: entry.timestamp, message: entry.message })) });
   } else if (action === 'deploy') {
     if (!id || !argument) throw new Error('Usage: npm run render -- deploy SERVICE_ID COMMIT_SHA');
     print(await api(`/services/${encodeURIComponent(id)}/deploys`, 'POST', { commitId: argument, clearCache: 'do_not_clear' }));
@@ -86,7 +90,7 @@ try {
     if (!service.url?.startsWith('https://')) throw new Error('A verified deployed service URL is required.');
     fs.writeFileSync('.env.client', `WHATSAPP_API_URL=${service.url}\nWHATSAPP_API_KEY=${local.API_SECRET}\n`);
     print({ credentialFile: '.env.client', note: 'Private local file, ignored by Git. Copy these two values to your other backend.' });
-  } else throw new Error('Actions: plan, workspaces, services, projects, validate, create-project, create-service, status, deploy, credentials');
+  } else throw new Error('Actions: plan, workspaces, services, projects, validate, create-project, create-service, status, logs, deploy, credentials');
 } catch (error) {
   print({ error: error instanceof Error ? error.message : 'Render operation failed' });
   process.exitCode = 1;
