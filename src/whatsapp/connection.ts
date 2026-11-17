@@ -120,7 +120,14 @@ export class WhatsAppConnectionManager {
       this.socket = socket;
       socket.ev.on('creds.update', () => {
         void saveCreds().catch((error: unknown) => {
+          if (this.socket !== socket) return;
+          this.stopped = true;
+          this.clearTimers();
+          this.clearQr();
+          this.socket = undefined;
+          this.state = 'error';
           this.lastError = 'Authentication persistence failed';
+          socket.end(new Error('Authentication persistence failed'));
           logger.error({ err: error }, 'WhatsApp authentication persistence failed');
         });
       });
@@ -143,7 +150,9 @@ export class WhatsAppConnectionManager {
 
     if (update.qr) {
       try {
-        this.qrDataUrl = await QRCode.toDataURL(update.qr, { errorCorrectionLevel: 'M' });
+        const qrDataUrl = await QRCode.toDataURL(update.qr, { errorCorrectionLevel: 'M' });
+        if (this.socket !== socket || this.stopped) return;
+        this.qrDataUrl = qrDataUrl;
         this.state = 'qr_required';
         this.resetQrExpiry();
       } catch (error) {

@@ -40,3 +40,7 @@ coverage/
 # Runtime data
 *.pid
 *.seed
+
+# Private conversation exports and local deployment tools
+codex-session-*.md
+.tools/

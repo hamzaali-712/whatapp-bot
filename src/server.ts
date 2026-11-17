@@ -13,6 +13,8 @@ import whatsappRoutes from './routes/whatsapp.js';
 import { startWhatsApp, stopWhatsApp } from './whatsapp/client.js';
 
 const app = express();
+// Render terminates HTTPS at its reverse proxy. Local runs retain Express defaults.
+if (process.env.RENDER === 'true') app.set('trust proxy', 1);
 let shuttingDown = false;
 
 app.disable('x-powered-by');

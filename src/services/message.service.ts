@@ -1,12 +1,12 @@
 import type { AnyMessageContent, WASocket } from '@whiskeysockets/baileys';
 import { ApiError } from '../middleware/errors.js';
-import { getSocket } from '../whatsapp/client.js';
+import { getSocket, getWhatsAppStatus } from '../whatsapp/client.js';
 
 const MAX_MEDIA_BYTES = 8 * 1024 * 1024;
 
 function connectedSocket(): WASocket {
   const socket = getSocket();
-  if (!socket) throw new ApiError(503, 'WHATSAPP_NOT_CONNECTED', 'WhatsApp is not connected.');
+  if (!socket || !getWhatsAppStatus().connected) throw new ApiError(503, 'WHATSAPP_NOT_CONNECTED', 'WhatsApp is not connected.');
   return socket;
 }
 

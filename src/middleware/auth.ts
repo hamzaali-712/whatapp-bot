@@ -22,10 +22,12 @@ export function authenticateAPI(
       ? authorization.slice(7)
       : '');
 
+  const suppliedBytes = typeof suppliedKey === 'string' ? Buffer.from(suppliedKey) : Buffer.alloc(0);
+  const expectedBytes = Buffer.from(env.API_SECRET);
   if (
     typeof suppliedKey !== 'string' ||
     !suppliedKey ||
-    suppliedKey.length !== env.API_SECRET.length
+    suppliedBytes.length !== expectedBytes.length
   ) {
     return res.status(401).json({
       success: false,
@@ -35,8 +37,8 @@ export function authenticateAPI(
   }
 
   const valid = timingSafeEqual(
-    Buffer.from(suppliedKey),
-    Buffer.from(env.API_SECRET)
+    suppliedBytes,
+    expectedBytes
   );
 
   if (!valid) {

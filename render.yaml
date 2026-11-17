@@ -1,0 +1,29 @@
+# Deployment happens only after the user's later deploy command.
+# Starter is paid; confirm the compute plan before applying this Blueprint.
+services:
+  - type: web
+    name: whatapp-bot
+    runtime: node
+    repo: https://github.com/hamzaali-712/whatapp-bot
+    branch: main
+    plan: starter
+    numInstances: 1
+    autoDeployTrigger: off
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /health/live
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 24.22.0
+      - key: WHATSAPP_SESSION_ID
+        value: main
+      - key: API_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: AUTH_ENCRYPTION_KEY
+        sync: false

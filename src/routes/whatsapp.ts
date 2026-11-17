@@ -35,6 +35,7 @@ function parse<T>(schema: z.ZodType<T>, input: unknown): T {
 
 router.get('/status', (_req, res) => res.json({ success: true, data: getWhatsAppStatus() }));
 router.get('/qr', qrLimiter, (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
   const qrDataUrl = getQRCode();
   if (!qrDataUrl) throw new ApiError(404, 'QR_UNAVAILABLE', 'QR unavailable. Check connection status.');
   res.json({ success: true, data: { qrDataUrl } });
