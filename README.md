@@ -19,3 +19,6 @@ the account being linked; a phone number is not a WhatsApp API key.
 See [the current audit and next steps](docs/current-audit-and-plan.md) for verified
 results and remaining production work. The project currently provides a REST API
 and incoming-message webhooks; it does not include an AI auto-reply workflow.
+
+See [integration instructions](docs/integration.md) to call this API from another
+backend or use `npm run whatsapp -- status` and the terminal send/receipt commands.

@@ -11,6 +11,8 @@
     "start": "node dist/server.js",
     "pair": "node scripts/pair.mjs",
     "doctor": "node scripts/doctor.mjs --database",
+    "whatsapp": "node scripts/whatsapp.mjs",
+    "render": "node scripts/render.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run"

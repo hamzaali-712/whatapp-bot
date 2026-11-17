@@ -1,6 +1,7 @@
 import type { WAMessage, WASocket } from '@whiskeysockets/baileys';
 import { logger } from '../config/logger.js';
 import { deliverWebhook } from '../services/webhook.service.js';
+import { messageStatuses } from '../services/message-status.js';
 
 function textFrom(message: WAMessage): string | null {
   const value = message.message;
@@ -8,6 +9,11 @@ function textFrom(message: WAMessage): string | null {
 }
 
 export function handleWhatsAppEvents(socket: WASocket): void {
+  socket.ev.on('messages.update', (updates) => {
+    for (const { key, update } of updates) {
+      if (key.id && typeof update.status === 'number') messageStatuses.update(key.id, update.status);
+    }
+  });
   socket.ev.on('messages.upsert', ({ messages, type }) => {
     if (type !== 'notify') return;
     for (const message of messages) {

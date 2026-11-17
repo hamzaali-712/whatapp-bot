@@ -7,6 +7,7 @@ All `/api/*` routes require `x-api-key` (or a Bearer token). Successful response
 | GET | `/health/live` | Process liveness |
 | GET | `/health/ready` | Readiness status |
 | GET | `/api/whatsapp/status` | WhatsApp state |
+| GET | `/api/whatsapp/messages/:messageId` | Outgoing acceptance/delivery/read receipt, held in memory for one hour |
 | GET | `/api/whatsapp/qr` | Protected QR data URL |
 | POST | `/api/whatsapp/send` | `{number,message}` |
 | POST | `/api/whatsapp/send-image` | Base64 image |

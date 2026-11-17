@@ -1,12 +1,12 @@
-# Deployment happens only after the user's later deploy command.
-# Starter is paid; confirm the compute plan before applying this Blueprint.
+# User selected Free compute. Supabase preserves encrypted WhatsApp auth.
 services:
   - type: web
     name: whatapp-bot
     runtime: node
     repo: https://github.com/hamzaali-712/whatapp-bot
     branch: main
-    plan: starter
+    plan: free
+    region: singapore
     numInstances: 1
     autoDeployTrigger: off
     buildCommand: npm ci --include=dev && npm run build

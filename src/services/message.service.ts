@@ -1,6 +1,8 @@
 import type { AnyMessageContent, WASocket } from '@whiskeysockets/baileys';
 import { ApiError } from '../middleware/errors.js';
 import { getSocket, getWhatsAppStatus } from '../whatsapp/client.js';
+import { generateMessageIDV2 } from '@whiskeysockets/baileys';
+import { messageStatuses } from './message-status.js';
 
 const MAX_MEDIA_BYTES = 8 * 1024 * 1024;
 
@@ -31,8 +33,17 @@ async function submit(number: string, content: AnyMessageContent): Promise<{ mes
   const jid = numberToJid(number);
   const registration = await socket.onWhatsApp(jid);
   if (!registration?.some((entry) => entry.exists === true)) throw new ApiError(400, 'RECIPIENT_NOT_ON_WHATSAPP', 'Recipient is not registered on WhatsApp.');
-  const sent = await socket.sendMessage(jid, content);
-  return { messageId: sent?.key.id ?? null, status: 'accepted' };
+  const messageId = generateMessageIDV2(socket.user?.id);
+  messageStatuses.accept(messageId);
+  try {
+    const sent = await socket.sendMessage(jid, content, { messageId });
+    if (!sent?.key.id) throw new ApiError(502, 'SEND_NOT_ACKNOWLEDGED', 'WhatsApp did not acknowledge the send request.');
+    if (typeof sent.status === 'number') messageStatuses.update(messageId, sent.status);
+    return { messageId: sent.key.id, status: 'accepted' };
+  } catch (error) {
+    messageStatuses.update(messageId, 0);
+    throw error;
+  }
 }
 
 export function sendTextMessage(number: string, message: string) {

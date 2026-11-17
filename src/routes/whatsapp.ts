@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { disconnectWhatsApp, getQRCode, getWhatsAppStatus } from '../whatsapp/client.js';
 import { ApiError } from '../middleware/errors.js';
 import { sendDocumentMessage, sendImageMessage, sendTextMessage } from '../services/message.service.js';
+import { messageStatuses } from '../services/message-status.js';
 
 const router = Router();
 function routeLimiter(limit: number) {
@@ -34,6 +35,12 @@ function parse<T>(schema: z.ZodType<T>, input: unknown): T {
 }
 
 router.get('/status', (_req, res) => res.json({ success: true, data: getWhatsAppStatus() }));
+router.get('/messages/:messageId', (req, res) => {
+  res.setHeader('Cache-Control', 'no-store');
+  const receipt = messageStatuses.get(String(req.params.messageId));
+  if (!receipt) throw new ApiError(404, 'MESSAGE_STATUS_UNAVAILABLE', 'Message is unknown, expired, or from a previous process.');
+  res.json({ success: true, data: receipt });
+});
 router.get('/qr', qrLimiter, (_req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const qrDataUrl = getQRCode();
