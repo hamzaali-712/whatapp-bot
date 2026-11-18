@@ -7,6 +7,11 @@ The API itself does not implement automatic conversational replies.
 The deployed base URL is `https://whatapp-bot-xnb0.onrender.com`.
 The local API is stopped so the cloud service owns the WhatsApp session.
 
+Opening the base URL returns public API information and endpoint paths. It does
+not open a chat interface. To send a message, your backend must make a `POST`
+request to `/api/whatsapp/send` with its API key and `{number,message}` body.
+Use `/health/live` to check the service in a browser without an API key.
+
 Set these values only in the other project's backend environment:
 
 ```dotenv

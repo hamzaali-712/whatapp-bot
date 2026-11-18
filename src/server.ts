@@ -7,6 +7,7 @@ import { logger } from './config/logger.js';
 import { authenticateAPI } from './middleware/auth.js';
 import { errorHandler, notFound } from './middleware/errors.js';
 import { requestId } from './middleware/request-id.js';
+import indexRoutes from './routes/index.js';
 import healthRoutes from './routes/health.js';
 import webhookRoutes from './routes/webhook.js';
 import whatsappRoutes from './routes/whatsapp.js';
@@ -41,6 +42,7 @@ const apiLimiter = rateLimit({
   },
 });
 
+app.use('/', indexRoutes);
 app.use('/health', healthRoutes);
 app.use('/api', apiLimiter);
 app.use('/api/whatsapp', authenticateAPI, whatsappRoutes);

@@ -4,6 +4,7 @@ All `/api/*` routes require `x-api-key` (or a Bearer token). Successful response
 
 | Method | Route | Meaning |
 | --- | --- | --- |
+| GET | `/` | Public API information and endpoint paths |
 | GET | `/health/live` | Process liveness |
 | GET | `/health/ready` | Readiness status |
 | GET | `/api/whatsapp/status` | WhatsApp state |
